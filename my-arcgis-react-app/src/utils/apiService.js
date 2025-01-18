@@ -13,6 +13,18 @@ const WEATHER_API_KEY = getEnvVar('VITE_WEATHER_API_KEY');
 const GEMINI_API_KEY = getEnvVar('VITE_GEMINI_API_KEY');
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
+// Calculate distance between two points in kilometers
+function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371; // Earth's radius in kilometers
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+}
+
 export async function getWeatherData(lat, lon) {
     try {
         const response = await fetch(
@@ -25,7 +37,6 @@ export async function getWeatherData(lat, lon) {
     }
 }
 
-// Example fire risk API (using USFS NFDRS as an example)
 export async function getFireData(lat, lon) {
     try {
         // For now, return mock data since we don't have a real fire API endpoint
@@ -35,6 +46,12 @@ export async function getFireData(lat, lon) {
                 drought_index: 0.6,
                 vegetation_dryness: "medium",
                 recent_fires: 0
+            },
+            nearest_fire: {
+                distance: 45.2,  // kilometers
+                name: "Sample Fire",
+                containment: "65%",
+                size: 1200  // acres
             }
         };
     } catch (error) {
@@ -48,27 +65,32 @@ export async function getGeminiAnalysis(weatherData, fireData, cityName) {
         const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
         const prompt = `
-            Analyze the following weather and fire risk data for ${cityName}:
+            Analyze this fire and weather data for ${cityName} and create a very concise, easy-to-read summary.
+            Focus on the most important information for residents.
             
-            Weather Data:
+            Data:
             - Temperature: ${weatherData.hourly.temperature_2m[0]}°C
             - Humidity: ${weatherData.hourly.relative_humidity_2m[0]}%
             - Wind Speed: ${weatherData.hourly.wind_speed_10m[0]} km/h
-            - Precipitation Probability: ${weatherData.hourly.precipitation_probability[0]}%
-            - Soil Moisture: ${weatherData.hourly.soil_moisture_1_to_3cm[0]}
+            - Fire Risk: ${fireData.risk_level}
+            - Nearest Fire: ${fireData.nearest_fire.distance}km away
+            - Nearest Fire Details: ${fireData.nearest_fire.name} (${fireData.nearest_fire.containment} contained)
             
-            Fire Risk Data:
-            - Risk Level: ${fireData.risk_level}
-            - Drought Index: ${fireData.conditions.drought_index}
-            - Vegetation Dryness: ${fireData.conditions.vegetation_dryness}
+            Format the response like this:
+            🔥 FIRE RISK: [risk level]
             
-            Provide a concise analysis including:
-            1. Current fire risk assessment based on weather conditions
-            2. Key weather factors that could affect fire risk in the next 24 hours
-            3. Specific actionable steps residents should take
-            4. Emergency preparedness recommendations
+            📍 NEAREST FIRE:
+            - Distance: [X] km away
+            - Name: [fire name]
+            - Containment: [X]%
             
-            Format the response in a clear, bullet-point manner.
+            🌡️ CURRENT CONDITIONS:
+            - [3-4 key weather points that affect fire risk]
+            
+            ⚠️ ACTIONS TO TAKE:
+            - [2-3 specific actions based on the conditions]
+            
+            Keep it brief but informative. Use emojis for visual scanning.
         `;
 
         const result = await model.generateContent(prompt);
