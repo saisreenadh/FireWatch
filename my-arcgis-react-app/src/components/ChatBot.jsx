@@ -45,23 +45,26 @@ function ChatBot({ onCitySearch }) {
                 const fireData = await getFireData(location.latitude, location.longitude);
                 const analysis = await getGeminiAnalysis(weatherData, fireData, userMessage);
 
-                // Add system response to chat
-                setMessages(prev => [...prev, { type: 'system', content: analysis }]);
+                // Add AI response to chat
+                setMessages(prev => [...prev, {
+                    type: 'assistant',
+                    content: analysis
+                }]);
             } else {
                 setMessages(prev => [...prev, {
-                    type: 'system',
+                    type: 'assistant',
                     content: "I couldn't find that location. Please try another city name."
                 }]);
             }
         } catch (error) {
             console.error('Error:', error);
             setMessages(prev => [...prev, {
-                type: 'system',
+                type: 'assistant',
                 content: "Sorry, I encountered an error. Please try again."
             }]);
+        } finally {
+            setLoading(false);
         }
-
-        setLoading(false);
     };
 
     return (
@@ -74,7 +77,7 @@ function ChatBot({ onCitySearch }) {
                 ))}
                 {loading && (
                     <div className="message system">
-                        Analyzing location and conditions...
+                        Analyzing conditions...
                     </div>
                 )}
             </div>
@@ -86,7 +89,7 @@ function ChatBot({ onCitySearch }) {
                     placeholder="Enter a city name..."
                     disabled={loading}
                 />
-                <button type="submit" disabled={loading || !input.trim()}>
+                <button type="submit" disabled={loading}>
                     Send
                 </button>
             </form>

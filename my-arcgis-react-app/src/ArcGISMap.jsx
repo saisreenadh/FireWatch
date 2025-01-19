@@ -4,6 +4,7 @@ import MapView from '@arcgis/core/views/MapView.js';
 import FeatureLayer from '@arcgis/core/layers/FeatureLayer.js';
 import Legend from '@arcgis/core/widgets/Legend.js';
 import * as locator from '@arcgis/core/rest/locator.js';
+import esriConfig from '@arcgis/core/config.js';
 import ChatBot from './components/ChatBot';
 import './components/ChatBot.css';
 
@@ -12,6 +13,10 @@ function ArcGISMap() {
   const [view, setView] = useState(null);
 
   useEffect(() => {
+    // Configure ArcGIS to use anonymous access
+    esriConfig.request.useIdentity = false;
+    esriConfig.request.interceptors = [];
+
     if (mapDiv.current) {
       // Create the map
       const map = new Map({
@@ -71,31 +76,24 @@ function ArcGISMap() {
         }
       });
 
-      // Add layers to the map
       map.add(firePerimetersLayer);
       map.add(activeFiresLayer);
 
       // Create the view
-      const newView = new MapView({
+      const mapView = new MapView({
         container: mapDiv.current,
         map: map,
         center: [-118.244, 34.052], // Los Angeles
         zoom: 6 // Zoomed out to show more fires
       });
 
-      // Add a legend
+      // Add legend
       const legend = new Legend({
-        view: newView
+        view: mapView
       });
-      newView.ui.add(legend, "bottom-right");
+      mapView.ui.add(legend, "bottom-right");
 
-      setView(newView);
-
-      return () => {
-        if (newView) {
-          newView.destroy();
-        }
-      };
+      setView(mapView);
     }
   }, []);
 
@@ -103,31 +101,41 @@ function ArcGISMap() {
     if (!view) return null;
 
     try {
-      const results = await locator.addressToLocations("https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer", {
+      // Use the World Geocoding Service with no authentication
+      const geocodingServiceUrl = "https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer";
+
+      const params = {
         address: {
           SingleLine: cityName
         },
-        outFields: ["*"]
-      });
+        outFields: ["*"],
+        maxLocations: 1,
+        forStorage: false
+      };
 
-      if (results.length > 0) {
-        const location = results[0];
+      const results = await locator.addressToLocations(geocodingServiceUrl, params);
+
+      if (results.length) {
+        const result = results[0];
+        const location = {
+          latitude: result.location.latitude,
+          longitude: result.location.longitude
+        };
+
+        // Animate to the location
         view.goTo({
-          center: [location.location.longitude, location.location.latitude],
-          zoom: 12
+          center: [location.longitude, location.latitude],
+          zoom: 10
         }, {
-          duration: 2000
+          duration: 1000,
+          easing: 'ease-in-out'
         });
 
-        // Return coordinates for the ChatBot to use
-        return {
-          latitude: location.location.latitude,
-          longitude: location.location.longitude
-        };
+        return location;
       }
       return null;
     } catch (error) {
-      console.error("Error finding location:", error);
+      console.error("Error searching for city:", error);
       return null;
     }
   };

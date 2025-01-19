@@ -11,7 +11,6 @@ const getEnvVar = (key) => {
 
 const WEATHER_API_KEY = getEnvVar('VITE_WEATHER_API_KEY');
 const GEMINI_API_KEY = getEnvVar('VITE_GEMINI_API_KEY');
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
 // Calculate distance between two points in kilometers
 function calculateDistance(lat1, lon1, lat2, lon2) {
@@ -62,42 +61,61 @@ export async function getFireData(lat, lon) {
 
 export async function getGeminiAnalysis(weatherData, fireData, cityName) {
     try {
-        const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+        const model = new GoogleGenerativeAI(getEnvVar('VITE_GEMINI_API_KEY')).getGenerativeModel({ model: 'gemini-pro' });
 
-        const prompt = `
-            Analyze this fire and weather data for ${cityName} and create a very concise, easy-to-read summary.
-            Focus on the most important information for residents.
-            
-            Data:
-            - Temperature: ${weatherData.hourly.temperature_2m[0]}°C
-            - Humidity: ${weatherData.hourly.relative_humidity_2m[0]}%
-            - Wind Speed: ${weatherData.hourly.wind_speed_10m[0]} km/h
-            - Fire Risk: ${fireData.risk_level}
-            - Nearest Fire: ${fireData.nearest_fire.distance}km away
-            - Nearest Fire Details: ${fireData.nearest_fire.name} (${fireData.nearest_fire.containment} contained)
-            
-            Format the response like this:
-            🔥 FIRE RISK: [risk level]
-            
-            📍 NEAREST FIRE:
-            - Distance: [X] km away
-            - Name: [fire name]
-            - Containment: [X]%
-            
-            🌡️ CURRENT CONDITIONS:
-            - [3-4 key weather points that affect fire risk]
-            
-            ⚠️ ACTIONS TO TAKE:
-            - [2-3 specific actions based on the conditions]
-            
-            Keep it brief but informative. Use emojis for visual scanning.
-        `;
+        const currentHourIndex = new Date().getHours();
+        const currentConditions = {
+            temperature: weatherData.hourly.temperature_2m[currentHourIndex],
+            humidity: weatherData.hourly.relative_humidity_2m[currentHourIndex],
+            windSpeed: weatherData.hourly.wind_speed_10m[currentHourIndex],
+            windDirection: weatherData.hourly.wind_direction_10m[currentHourIndex],
+            windGusts: weatherData.hourly.wind_gusts_10m[currentHourIndex],
+            precipitation: weatherData.hourly.precipitation[currentHourIndex],
+            precipitationProb: weatherData.hourly.precipitation_probability[currentHourIndex],
+            soilMoisture: weatherData.hourly.soil_moisture_1_to_3cm[currentHourIndex]
+        };
+
+        const prompt = `Based on the following weather conditions for ${cityName}, provide a fire risk assessment. Format your response exactly as shown below, replacing the placeholders with your analysis. Do not use asterisks or markdown formatting:
+
+Current Weather Data:
+Temperature: ${currentConditions.temperature}°C
+Humidity: ${currentConditions.humidity}%
+Wind Speed: ${currentConditions.windSpeed} km/h
+Wind Direction: ${currentConditions.windDirection}°
+Wind Gusts: ${currentConditions.windGusts} km/h
+Precipitation: ${currentConditions.precipitation} mm
+Precipitation Probability: ${currentConditions.precipitationProb}%
+Soil Moisture: ${currentConditions.soilMoisture} m³/m³
+
+Please format your response exactly like this (replace text in brackets with your analysis):
+
+Fire Risk Assessment for ${cityName}
+
+Risk Level: [Single word: Low/Moderate/High/Extreme]
+Risk Percentage: [X]%
+
+Key Risk Factors:
+• [First major risk factor]
+• [Second major risk factor]
+• [Third major risk factor if applicable]
+
+Current Concerns:
+• [First specific concern]
+• [Second specific concern]
+• [Third specific concern if applicable]
+
+Safety Recommendations:
+• [First recommendation]
+• [Second recommendation]
+• [Third recommendation if applicable]
+
+Keep the response concise and clear. Use bullet points with • instead of - or *. Do not add any additional formatting or sections.`;
 
         const result = await model.generateContent(prompt);
         const response = await result.response;
         return response.text();
     } catch (error) {
-        console.error('Error getting AI analysis:', error);
-        return 'Unable to generate AI analysis at this time.';
+        console.error('Error getting Gemini analysis:', error);
+        return 'Unable to analyze weather conditions at this time.';
     }
 }
