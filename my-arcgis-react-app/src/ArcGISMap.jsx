@@ -1,32 +1,68 @@
 import React, { useRef, useEffect, useState } from 'react';
 import Map from '@arcgis/core/Map.js';
-import MapView from '@arcgis/core/views/MapView.js';
+import SceneView from '@arcgis/core/views/SceneView.js';
 import FeatureLayer from '@arcgis/core/layers/FeatureLayer.js';
 import Legend from '@arcgis/core/widgets/Legend.js';
 import * as locator from '@arcgis/core/rest/locator.js';
-import esriConfig from '@arcgis/core/config.js';
+import ElevationLayer from "@arcgis/core/layers/ElevationLayer.js";
+import GraphicsLayer from "@arcgis/core/layers/GraphicsLayer.js";
+import Point from "@arcgis/core/geometry/Point.js";
 import ChatBot from './components/ChatBot';
 import './components/ChatBot.css';
+import config from "@arcgis/core/config.js";
 
 function ArcGISMap() {
   const mapDiv = useRef(null);
   const [view, setView] = useState(null);
 
   useEffect(() => {
-    // Configure ArcGIS to use anonymous access
-    esriConfig.request.useIdentity = false;
-    esriConfig.request.interceptors = [];
-
+    // Disable authentication for public layers
+    config.apiKey = "";
+    config.request.useIdentity = false;
+    
     if (mapDiv.current) {
-      // Create the map
-      const map = new Map({
-        basemap: 'topo-vector'
+      // Create elevation layer for terrain
+      const elevationLayer = new ElevationLayer({
+        url: "https://elevation3d.arcgis.com/arcgis/rest/services/WorldElevation3D/Terrain3D/ImageServer"
       });
 
-      // Add Active Fire Reports Layer
+      // Create the map as a 3D scene
+      const map = new Map({
+        basemap: 'satellite',
+        ground: {
+          layers: [elevationLayer]
+        }
+      });
+
+      // Create graphics layer for fire visualization
+      const fireGraphicsLayer = new GraphicsLayer();
+
+      // Add Active Fire Reports Layer with 3D visualization
       const activeFiresLayer = new FeatureLayer({
         url: "https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/Active_Fires/FeatureServer/0",
         title: "Active Fires",
+        outFields: ["*"],
+        elevationInfo: {
+          mode: "relative-to-ground",
+          offset: 1000, // Offset from ground in meters
+          featureExpressionInfo: {
+            expression: "$feature.DailyAcres * 10" // Scale height based on acres
+          },
+          unit: "meters"
+        },
+        renderer: {
+          type: "simple",
+          symbol: {
+            type: "point-3d",
+            symbolLayers: [{
+              type: "object",
+              resource: { primitive: "cylinder" },
+              material: { color: [255, 70, 0, 0.8] },
+              height: 1000,
+              width: 5000
+            }]
+          }
+        },
         popupTemplate: {
           title: "Fire Information",
           content: [
@@ -44,20 +80,28 @@ function ArcGISMap() {
         }
       });
 
-      // Add Fire Perimeter Layer
+      // Add Fire Perimeter Layer with 3D visualization
       const firePerimetersLayer = new FeatureLayer({
         url: "https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Interagency_Perimeters/FeatureServer/0",
         title: "Fire Perimeters",
+        outFields: ["*"],
         opacity: 0.7,
+        elevationInfo: {
+          mode: "on-the-ground",
+          offset: 10 // Slight offset to prevent z-fighting
+        },
         renderer: {
           type: "simple",
           symbol: {
-            type: "simple-fill",
-            color: [255, 70, 0, 0.3],
-            outline: {
-              color: [255, 70, 0, 0.7],
-              width: 1
-            }
+            type: "polygon-3d",
+            symbolLayers: [{
+              type: "fill",
+              material: { color: [255, 70, 0, 0.3] },
+              outline: {
+                color: [255, 70, 0, 0.7],
+                width: 2
+              }
+            }]
           }
         },
         popupTemplate: {
@@ -76,24 +120,46 @@ function ArcGISMap() {
         }
       });
 
+      // Add layers to the map
       map.add(firePerimetersLayer);
       map.add(activeFiresLayer);
+      map.add(fireGraphicsLayer);
 
-      // Create the view
-      const mapView = new MapView({
+      // Create the SceneView
+      const newView = new SceneView({
         container: mapDiv.current,
         map: map,
-        center: [-118.244, 34.052], // Los Angeles
-        zoom: 6 // Zoomed out to show more fires
+        camera: {
+          position: {
+            longitude: -118.244,
+            latitude: 34.052,
+            z: 100000 // Height in meters
+          },
+          tilt: 65 // Angle in degrees
+        },
+        environment: {
+          atmosphere: { quality: "high" },
+          lighting: { date: new Date(), directShadowsEnabled: true }
+        },
+        qualityProfile: "high",
+        ui: {
+          components: ["zoom", "compass", "attribution"]
+        }
       });
 
-      // Add legend
+      // Add a legend
       const legend = new Legend({
-        view: mapView
+        view: newView
       });
-      mapView.ui.add(legend, "bottom-right");
+      newView.ui.add(legend, "bottom-right");
 
-      setView(mapView);
+      setView(newView);
+
+      return () => {
+        if (newView) {
+          newView.destroy();
+        }
+      };
     }
   }, []);
 
@@ -101,41 +167,38 @@ function ArcGISMap() {
     if (!view) return null;
 
     try {
-      // Use the World Geocoding Service with no authentication
-      const geocodingServiceUrl = "https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer";
-
-      const params = {
+      const results = await locator.addressToLocations("https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer", {
         address: {
           SingleLine: cityName
         },
-        outFields: ["*"],
-        maxLocations: 1,
-        forStorage: false
-      };
+        outFields: ["*"]
+      });
 
-      const results = await locator.addressToLocations(geocodingServiceUrl, params);
-
-      if (results.length) {
-        const result = results[0];
-        const location = {
-          latitude: result.location.latitude,
-          longitude: result.location.longitude
-        };
-
-        // Animate to the location
+      if (results.length > 0) {
+        const location = results[0];
+        
+        // Create a more dramatic camera movement for 3D
         view.goTo({
-          center: [location.longitude, location.latitude],
-          zoom: 10
+          target: new Point({
+            longitude: location.location.longitude,
+            latitude: location.location.latitude
+          }),
+          zoom: 12,
+          tilt: 65,
+          heading: 0
         }, {
-          duration: 1000,
-          easing: 'ease-in-out'
+          duration: 2000,
+          easing: "out-expo"
         });
 
-        return location;
+        return {
+          latitude: location.location.latitude,
+          longitude: location.location.longitude
+        };
       }
       return null;
     } catch (error) {
-      console.error("Error searching for city:", error);
+      console.error("Error finding location:", error);
       return null;
     }
   };
@@ -149,9 +212,9 @@ function ArcGISMap() {
         style={{
           padding: 0,
           margin: 0,
-          marginLeft: '350px',
+          marginLeft: '450px',
           height: '100%',
-          width: 'calc(100% - 350px)'
+          width: 'calc(100% - 450px)'
         }}
       />
     </div>
