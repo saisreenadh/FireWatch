@@ -141,8 +141,9 @@ function ArcGISMap() {
         style={{
           padding: 0,
           margin: 0,
+          marginLeft: '350px',
           height: '100%',
-          width: '100%'
+          width: 'calc(100% - 350px)'
         }}
       />
     </div>

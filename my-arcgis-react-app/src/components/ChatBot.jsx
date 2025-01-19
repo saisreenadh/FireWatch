@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { getWeatherData, getFireData, getGeminiAnalysis } from '../utils/apiService';
 import './ChatBot.css';
 
-function ChatBot() {
+function ChatBot({ onCitySearch }) {
     const [messages, setMessages] = useState([{
         type: 'system',
         content: "Hi! I'm your fire safety assistant. Where do you live? Please enter your city name."
@@ -30,73 +30,28 @@ function ChatBot() {
         setMessages(prev => [...prev, { type: 'user', content: userMessage }]);
 
         try {
-            if (!userLocation) {
-                // First message - get user's location
-                const geocodeUrl = `https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates?address=${encodeURIComponent(userMessage)}&f=json`;
-                const response = await fetch(geocodeUrl);
-                const data = await response.json();
+            // Use the provided onCitySearch to get location and move map
+            const location = await onCitySearch(userMessage);
+            
+            if (location) {
+                setUserLocation({
+                    city: userMessage,
+                    lat: location.latitude,
+                    lon: location.longitude
+                });
 
-                if (data.candidates && data.candidates.length > 0) {
-                    const location = data.candidates[0];
-                    setUserLocation({
-                        city: userMessage,
-                        lat: location.location.y,
-                        lon: location.location.x
-                    });
+                // Get weather and fire data
+                const weatherData = await getWeatherData(location.latitude, location.longitude);
+                const fireData = await getFireData(location.latitude, location.longitude);
+                const analysis = await getGeminiAnalysis(weatherData, fireData, userMessage);
 
-                    // Get weather and fire data
-                    const weatherData = await getWeatherData(location.location.y, location.location.x);
-                    const fireData = await getFireData(location.location.y, location.location.x);
-                    const analysis = await getGeminiAnalysis(weatherData, fireData, userMessage);
-
-                    setMessages(prev => [...prev, {
-                        type: 'system',
-                        content: analysis + "\n\nYou can ask me specific questions about fire safety in your area, or type another city name to check a different location."
-                    }]);
-                } else {
-                    setMessages(prev => [...prev, {
-                        type: 'system',
-                        content: "I couldn't find that location. Please try entering a city name."
-                    }]);
-                }
+                // Add system response to chat
+                setMessages(prev => [...prev, { type: 'system', content: analysis }]);
             } else {
-                // Subsequent messages - handle questions or new location checks
-                if (userMessage.toLowerCase().includes('fire') || 
-                    userMessage.toLowerCase().includes('weather') || 
-                    userMessage.toLowerCase().includes('risk')) {
-                    // Get updated data for existing location
-                    const weatherData = await getWeatherData(userLocation.lat, userLocation.lon);
-                    const fireData = await getFireData(userLocation.lat, userLocation.lon);
-                    const analysis = await getGeminiAnalysis(weatherData, fireData, userLocation.city);
-                    
-                    setMessages(prev => [...prev, {
-                        type: 'system',
-                        content: analysis
-                    }]);
-                } else {
-                    // Try to geocode as new location
-                    const geocodeUrl = `https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates?address=${encodeURIComponent(userMessage)}&f=json`;
-                    const response = await fetch(geocodeUrl);
-                    const data = await response.json();
-
-                    if (data.candidates && data.candidates.length > 0) {
-                        const location = data.candidates[0];
-                        setUserLocation({
-                            city: userMessage,
-                            lat: location.location.y,
-                            lon: location.location.x
-                        });
-
-                        const weatherData = await getWeatherData(location.location.y, location.location.x);
-                        const fireData = await getFireData(location.location.y, location.location.x);
-                        const analysis = await getGeminiAnalysis(weatherData, fireData, userMessage);
-
-                        setMessages(prev => [...prev, {
-                            type: 'system',
-                            content: analysis
-                        }]);
-                    }
-                }
+                setMessages(prev => [...prev, {
+                    type: 'system',
+                    content: "I couldn't find that location. Please try another city name."
+                }]);
             }
         } catch (error) {
             console.error('Error:', error);
@@ -110,28 +65,28 @@ function ChatBot() {
     };
 
     return (
-        <div className="chatbot">
+        <div className="chatbot-container">
             <div className="chat-history" ref={chatHistoryRef}>
                 {messages.map((message, index) => (
-                    <div key={index} className={`chat-message ${message.type}`}>
+                    <div key={index} className={`message ${message.type}`}>
                         {message.content}
                     </div>
                 ))}
                 {loading && (
-                    <div className="chat-message system">
-                        Loading...
+                    <div className="message system">
+                        Analyzing location and conditions...
                     </div>
                 )}
             </div>
-            <form onSubmit={handleSubmit} className="chat-input">
+            <form onSubmit={handleSubmit} className="chat-input-form">
                 <input
                     type="text"
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
-                    placeholder="Enter a city name or ask a question..."
-                    className="chat-input-field"
+                    placeholder="Enter a city name..."
+                    disabled={loading}
                 />
-                <button type="submit" className="send-button" disabled={loading}>
+                <button type="submit" disabled={loading || !input.trim()}>
                     Send
                 </button>
             </form>
