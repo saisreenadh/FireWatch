@@ -1,6 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { library } from '@fortawesome/fontawesome-svg-core';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faMicrophone, faTimes } from '@fortawesome/free-solid-svg-icons';
 import { getWeatherData, getFireData, getGeminiAnalysis } from '../utils/apiService';
 import './ChatBot.css';
+
+// Add icons to the library
+library.add(faMicrophone, faTimes);
 
 function ChatBot({ onCitySearch }) {
     const [messages, setMessages] = useState([{
@@ -10,13 +16,68 @@ function ChatBot({ onCitySearch }) {
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
     const [userLocation, setUserLocation] = useState(null);
+    const [recognizing, setRecognizing] = useState(false);
+    const recognition = useRef(null);
     const chatHistoryRef = useRef(null);
+
+    useEffect(() => {
+        // Initialize speech recognition
+        if (!('SpeechRecognition' in window) && !('webkitSpeechRecognition' in window)) {
+            console.warn('Voice typing is not supported in this browser.');
+            return;
+        }
+
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        recognition.current = new SpeechRecognition();
+        recognition.current.continuous = true;
+        recognition.current.interimResults = true;
+
+        recognition.current.onresult = (event) => {
+            let interimTranscript = '';
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                if (event.results[i].isFinal) {
+                    setInput((prevInput) => prevInput + event.results[i][0].transcript);
+                } else {
+                    interimTranscript += event.results[i][0].transcript;
+                }
+            }
+        };
+
+        recognition.current.onerror = (event) => {
+            console.error('Speech recognition error detected: ' + event.error);
+            setRecognizing(false);
+        };
+
+        recognition.current.onend = () => {
+            if (recognizing) {
+                recognition.current.start();
+            } else {
+                setRecognizing(false);
+            }
+        };
+
+        return () => {
+            if (recognition.current) {
+                recognition.current.stop();
+            }
+        };
+    }, []);
 
     useEffect(() => {
         if (chatHistoryRef.current) {
             chatHistoryRef.current.scrollTop = chatHistoryRef.current.scrollHeight;
         }
     }, [messages]);
+
+    const handleVoiceInput = () => {
+        if (recognizing) {
+            recognition.current.stop();
+            setRecognizing(false);
+        } else {
+            recognition.current.start();
+            setRecognizing(true);
+        }
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -131,6 +192,14 @@ function ChatBot({ onCitySearch }) {
                     placeholder="Enter a city name..."
                     disabled={loading}
                 />
+                <button 
+                    type="button" 
+                    className={`voice-button ${recognizing ? 'recording' : ''}`}
+                    onClick={handleVoiceInput}
+                    title={recognizing ? "Stop voice input" : "Start voice input"}
+                >
+                    <FontAwesomeIcon icon={recognizing ? faTimes : faMicrophone} style={{ fontSize: '20px' }} />
+                </button>
                 <button type="submit" disabled={loading}>
                     Send
                 </button>
