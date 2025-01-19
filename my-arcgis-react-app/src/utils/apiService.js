@@ -88,7 +88,7 @@ export async function getGeminiAnalysis(weatherData, fireData, cityName) {
             soilMoisture: weatherData.hourly.soil_moisture_1_to_3cm[currentHourIndex]
         };
 
-        const prompt = `Analyze the following comprehensive weather and fire data to provide a detailed fire risk assessment for ${cityName}:
+        const prompt = `As a fire safety expert, analyze this comprehensive weather and fire data for ${cityName} and provide a practical fire risk assessment:
 
 CURRENT CONDITIONS:
 Temperature: ${currentConditions.temperature}°C
@@ -96,78 +96,62 @@ Humidity: ${currentConditions.humidity}%
 Wind Speed: ${currentConditions.windSpeed} km/h
 Wind Direction: ${currentConditions.windDirection}°
 Wind Gusts: ${currentConditions.windGusts} km/h
-Precipitation: ${currentConditions.precipitation} mm
+Current Precipitation: ${currentConditions.precipitation} mm
 Precipitation Probability: ${currentConditions.precipitationProb}%
 Soil Moisture: ${currentConditions.soilMoisture} m³/m³
 
-31-DAY HISTORICAL TRENDS:
+WEATHER PATTERNS (Last 31 Days):
 Average Temperature: ${historicalData.avgTemp.toFixed(1)}°C
 Average Humidity: ${historicalData.avgHumidity.toFixed(1)}%
 Average Wind Speed: ${historicalData.avgWindSpeed.toFixed(1)} km/h
-Average Soil Moisture: ${historicalData.avgSoilMoisture.toFixed(3)} m³/m³
-Days with No Precipitation: ${historicalData.dryDays}
-Days with High Winds (>20 km/h): ${historicalData.highWindDays}
-Days with Low Humidity (<30%): ${historicalData.lowHumidityDays}
+Days without significant rain: ${historicalData.dryDays}
+Days with strong winds: ${historicalData.highWindDays}
+Days with very dry conditions: ${historicalData.lowHumidityDays}
 
 FIRE ACTIVITY (50km radius):
-Total Active Fires: ${fireData.active_fires_count || 0}
-Total Fire Perimeters: ${fireData.perimeters_count || 0}
-Total Burned Area: ${fireData.total_burned_acres ? fireData.total_burned_acres.toFixed(1) : 0} acres
+Active Fires: ${fireData.active_fires_count || 0}
+Fire Perimeters: ${fireData.perimeters_count || 0}
+Total Area Burning: ${fireData.total_burned_acres ? fireData.total_burned_acres.toFixed(1) : 0} acres
 ${fireData.nearest_fire ? `
-Nearest Fire:
+Closest Fire:
 - Name: ${fireData.nearest_fire.name}
 - Distance: ${fireData.nearest_fire.distance} km
 - Size: ${fireData.nearest_fire.size} acres
 - Containment: ${fireData.nearest_fire.containment}` : ''}
 
-Based on this data, provide a detailed fire risk assessment. Consider:
-1. Current fire weather conditions (temperature, humidity, wind)
-2. Historical weather patterns showing drought or fire-prone conditions
-3. Soil moisture levels indicating vegetation dryness
-4. Existing fire activity in the area
-5. Wind conditions that could affect fire spread
+Provide a practical fire risk assessment considering:
+1. Actual fire presence and behavior in the area
+2. Current weather that could affect fire spread (wind, humidity, temperature)
+3. Recent weather patterns indicating fire-prone conditions
+4. Ground conditions (soil moisture, precipitation)
 
 Format the response exactly like this:
 {
   "cityName": "${cityName}",
   "fireRiskAssessment": {
-    "riskLevel": "[REQUIRED: Based on riskPercentage - Low (0-33), Medium (34-66), High (67-100)]",
-    "riskPercentage": "[REQUIRED: Precise number 0-100, calculate as follows:
-      - Current conditions (50%):
-        * Temperature: 0-10 points (>30°C: 10pts, >25°C: 7pts, >20°C: 5pts, >15°C: 3pts)
-        * Humidity: 0-15 points (<30%: 15pts, <40%: 10pts, <50%: 5pts)
-        * Wind Speed: 0-15 points (>30km/h: 15pts, >20km/h: 10pts, >10km/h: 5pts)
-        * Soil Moisture: 0-10 points (<0.1: 10pts, <0.2: 7pts, <0.3: 3pts)
-      - Fire activity (25%):
-        * Nearest fire distance: 0-10 points (<10km: 10pts, <25km: 7pts, <50km: 3pts)
-        * Total fires: 0-10 points (>5: 10pts, >3: 7pts, >1: 3pts)
-        * Burned area: 0-5 points (>1000acres: 5pts, >500acres: 3pts, >100acres: 1pt)
-      - Historical trends (25%):
-        * Dry days: 0-10 points (>20days: 10pts, >15days: 7pts, >10days: 3pts)
-        * High wind days: 0-10 points (>15days: 10pts, >10days: 7pts, >5days: 3pts)
-        * Low humidity days: 0-5 points (>10days: 5pts, >7days: 3pts, >3days: 1pt)]",
+    "riskLevel": "[REQUIRED: Low/Medium/High - Consider regional characteristics. Los Angeles and Southern California are HIGH due to climate, vegetation, and fire history]",
     "keyRiskFactors": [
-      "[REQUIRED: Primary weather-based risk factor with specific numbers]",
-      "[REQUIRED: Primary fire-activity risk factor with specific numbers]",
-      "[OPTIONAL: Additional significant risk factor with specific numbers]"
+      "[REQUIRED: Most critical current condition]",
+      "[REQUIRED: Most significant fire activity]",
+      "[OPTIONAL: Additional important factor]"
     ],
     "currentConcerns": [
-      "[REQUIRED: Most immediate concern with specific measurements]",
-      "[REQUIRED: Secondary concern with specific measurements]",
-      "[OPTIONAL: Additional relevant concern with specific measurements]"
+      "[REQUIRED: Most pressing immediate concern]",
+      "[REQUIRED: Secondary current concern]",
+      "[OPTIONAL: Additional concern]"
     ],
     "safetyRecommendations": [
-      "[REQUIRED: Most critical safety action based on highest risk factor]",
-      "[REQUIRED: Secondary safety recommendation based on second highest risk]",
-      "[OPTIONAL: Additional safety measure if needed]"
+      "[REQUIRED: Most important immediate action]",
+      "[REQUIRED: Secondary safety measure]",
+      "[OPTIONAL: Additional precaution]"
     ]
   }
 }
 
-Calculate risk percentage using:
-- Current conditions (50%): temperature, humidity, wind speed, soil moisture
-- Fire activity (25%): proximity to fires, total burned area, containment levels
-- Historical trends (25%): dry days, wind patterns, moisture trends`;
+Consider real-world examples:
+High Risk: Los Angeles and Southern California due to Santa Ana winds, dry climate, and fire history. Areas with active fires or severe fire weather.
+Medium Risk: Areas experiencing drought or moderate fire weather conditions
+Low Risk: Areas with consistent rainfall and minimal fire history`;
 
         const result = await model.generateContent(prompt);
         const response = await result.response;
