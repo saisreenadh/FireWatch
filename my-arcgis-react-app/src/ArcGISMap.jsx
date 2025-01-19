@@ -30,7 +30,8 @@ function ArcGISMap() {
       const map = new Map({
         basemap: 'satellite',
         ground: {
-          layers: [elevationLayer]
+          layers: [elevationLayer],
+          opacity: 1
         }
       });
 
@@ -85,7 +86,7 @@ function ArcGISMap() {
         url: "https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Interagency_Perimeters/FeatureServer/0",
         title: "Fire Perimeters",
         outFields: ["*"],
-        opacity: 0.7,
+        opacity: 1,
         elevationInfo: {
           mode: "on-the-ground",
           offset: 10 // Slight offset to prevent z-fighting
@@ -96,10 +97,10 @@ function ArcGISMap() {
             type: "polygon-3d",
             symbolLayers: [{
               type: "fill",
-              material: { color: [255, 70, 0, 0.3] },
+              material: { color: [255, 165, 0, 0.7] },
               outline: {
-                color: [255, 70, 0, 0.7],
-                width: 2
+                color: [255, 69, 0, 1],
+                width: 4
               }
             }]
           }
@@ -131,15 +132,26 @@ function ArcGISMap() {
         map: map,
         camera: {
           position: {
-            longitude: -118.244,
-            latitude: 34.052,
-            z: 100000 // Height in meters
+            longitude: -98.5795,
+            latitude: 39.8283,
+            z: 12000000 // Increased height to see more of the globe
           },
-          tilt: 65 // Angle in degrees
+          tilt: 0 // Flat view initially
         },
         environment: {
           atmosphere: { quality: "high" },
-          lighting: { date: new Date(), directShadowsEnabled: true }
+          lighting: {
+            date: new Date(2024, 5, 21, 12, 0),
+            directShadowsEnabled: true,
+            ambientOcclusionEnabled: true,
+            brightness: 1.2,
+            waterReflectionEnabled: true,
+            cameraTrackingEnabled: false
+          },
+          background: {
+            type: "color",
+            color: [0, 0, 0, 1]  // Black background to make earth features pop
+          }
         },
         qualityProfile: "high",
         ui: {
