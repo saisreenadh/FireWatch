@@ -70,6 +70,9 @@
 .message.assistant {
     background: rgba(45, 45, 65, 0.8);
     color: #ffffff;
+    max-width: 100%;
+    padding: 0px !important;
+    width: 100%;
     align-self: flex-start;
     border-bottom-left-radius: 4px;
     white-space: pre-line;
@@ -82,7 +85,6 @@
     background: rgba(0, 121, 193, 0.15);
     border-radius: 12px;
     padding: 24px;
-    margin: 12px 0;
     border: 1px solid rgba(0, 121, 193, 0.2);
     display: flex;
     flex-direction: column;
