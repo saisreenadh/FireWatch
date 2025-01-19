@@ -75,45 +75,15 @@ export async function getGeminiAnalysis(weatherData, fireData, cityName) {
             soilMoisture: weatherData.hourly.soil_moisture_1_to_3cm[currentHourIndex]
         };
 
-        const prompt = `Based on the following weather conditions for ${cityName}, provide a fire risk assessment. Format your response exactly as shown below, replacing the placeholders with your analysis. Do not use asterisks or markdown formatting:
+        const prompt = `Current Weather Data: \nTemperature: ${currentConditions.temperature}°C\nHumidity: ${currentConditions.humidity}%\nWind Speed: ${currentConditions.windSpeed} km/h\nWind Direction: ${currentConditions.windDirection}°\nWind Gusts: ${currentConditions.windGusts} km/h\nPrecipitation: ${currentConditions.precipitation} mm\nPrecipitation Probability: ${currentConditions.precipitationProb}%\nSoil Moisture: ${currentConditions.soilMoisture} m³/m³\n\nPlease format your response exactly like this (replace text in brackets with your analysis):\n\n{\n  "cityName": "${cityName}",\n  "fireRiskAssessment": {\n    "riskLevel": "[Single word: Low/Moderate/High/Extreme]",\n    "riskPercentage": "[X]%",\n    "keyRiskFactors": [\n      "[First major risk factor]",\n      "[Second major risk factor]",\n      "[Third major risk factor if applicable]"\n    ],\n    "currentConcerns": [\n      "[First specific concern]",\n      "[Second specific concern]",\n      "[Third specific concern if applicable]"\n    ],\n    "safetyRecommendations": [\n      "[First recommendation]",\n      "[Second recommendation]",\n      "[Third recommendation if applicable]"\n    ]\n  }\n}\n\nKeep the response concise and clear.`;
 
-Current Weather Data:
-Temperature: ${currentConditions.temperature}°C
-Humidity: ${currentConditions.humidity}%
-Wind Speed: ${currentConditions.windSpeed} km/h
-Wind Direction: ${currentConditions.windDirection}°
-Wind Gusts: ${currentConditions.windGusts} km/h
-Precipitation: ${currentConditions.precipitation} mm
-Precipitation Probability: ${currentConditions.precipitationProb}%
-Soil Moisture: ${currentConditions.soilMoisture} m³/m³
+        const result = await model.generateContent(prompt, {
+            response_mime_type: "application/json",
+        });
 
-Please format your response exactly like this (replace text in brackets with your analysis):
-
-Fire Risk Assessment for ${cityName}
-
-Risk Level: [Single word: Low/Moderate/High/Extreme]
-Risk Percentage: [X]%
-
-Key Risk Factors:
-• [First major risk factor]
-• [Second major risk factor]
-• [Third major risk factor if applicable]
-
-Current Concerns:
-• [First specific concern]
-• [Second specific concern]
-• [Third specific concern if applicable]
-
-Safety Recommendations:
-• [First recommendation]
-• [Second recommendation]
-• [Third recommendation if applicable]
-
-Keep the response concise and clear. Use bullet points with • instead of - or *. Do not add any additional formatting or sections.`;
-
-        const result = await model.generateContent(prompt);
         const response = await result.response;
-        return response.text();
+        console.log("test", JSON.parse(response.text()));
+        return JSON.parse(response.text());
     } catch (error) {
         console.error('Error getting Gemini analysis:', error);
         return 'Unable to analyze weather conditions at this time.';
