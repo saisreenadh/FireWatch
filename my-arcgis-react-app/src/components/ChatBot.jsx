@@ -5,7 +5,7 @@ import './ChatBot.css';
 function ChatBot({ onCitySearch }) {
     const [messages, setMessages] = useState([{
         type: 'system',
-        content: "Hi! I'm your fire safety assistant. Where do you live? Please enter your city name."
+        content: "👋 Hi! I'm your fire safety assistant. Where do you live? Please enter your city name."
     }]);
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
@@ -72,12 +72,54 @@ function ChatBot({ onCitySearch }) {
             <div className="chat-history" ref={chatHistoryRef}>
                 {messages.map((message, index) => (
                     <div key={index} className={`message ${message.type}`}>
-                        {message.content}
+                        {message.type === 'assistant' && typeof message.content === 'object' ? (
+                            <div className="stats-container">
+                                <h2>🏙️ {message.content.cityName}</h2>
+                                <div className="stat-item risk-level">
+                                    <span className="stat-label">🚨 Risk Level:</span>
+                                    <span className={`stat-value highlight risk-${message.content.fireRiskAssessment.riskLevel.toLowerCase()}`}>
+                                        {message.content.fireRiskAssessment.riskLevel} ({message.content.fireRiskAssessment.riskPercentage})
+                                    </span>
+                                </div>
+                                
+                                <div className="stat-item">
+                                    <span className="stat-label">⚠️ Key Risk Factors:</span>
+                                    <ul className="risk-factors-list">
+                                        {message.content.fireRiskAssessment.keyRiskFactors.map((factor, i) => (
+                                            <li key={i}>🔸 {factor}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                                
+                                <div className="stat-item">
+                                    <span className="stat-label">🔍 Current Concerns:</span>
+                                    <ul className="concerns-list">
+                                        {message.content.fireRiskAssessment.currentConcerns.map((concern, i) => (
+                                            <li key={i}>❗ {concern}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                                
+                                <div className="stat-item">
+                                    <span className="stat-label">💡 Safety Recommendations:</span>
+                                    <ul className="recommendations-list">
+                                        {message.content.fireRiskAssessment.safetyRecommendations.map((rec, i) => (
+                                            <li key={i}>✅ {rec}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            </div>
+                        ) : (
+                            message.content
+                        )}
                     </div>
                 ))}
                 {loading && (
                     <div className="message system">
-                        Analyzing conditions...
+                        <div className="loading-message">
+                            <span className="loading-icon">🔄</span>
+                            Analyzing conditions...
+                        </div>
                     </div>
                 )}
             </div>
