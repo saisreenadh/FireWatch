@@ -1,11 +1,16 @@
 // src/App.jsx
 import React from 'react';
 import ArcGISMap from './ArcGISMap';
+import ChatBot from './components/ChatBot';
+import './App.css';
 
 function App() {
   return (
-    <div style={{ width: '100%', height: '100vh' }}>
-      <ArcGISMap />
+    <div className="app-container">
+      <ChatBot />
+      <div className="map-container">
+        <ArcGISMap />
+      </div>
     </div>
   );
 }
