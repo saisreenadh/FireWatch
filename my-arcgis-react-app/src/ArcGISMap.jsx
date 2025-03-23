@@ -7,6 +7,7 @@ import * as locator from '@arcgis/core/rest/locator.js';
 import ElevationLayer from "@arcgis/core/layers/ElevationLayer.js";
 import GraphicsLayer from "@arcgis/core/layers/GraphicsLayer.js";
 import Point from "@arcgis/core/geometry/Point.js";
+import Graphic from "@arcgis/core/Graphic.js";
 import ChatBot from './components/ChatBot';
 import './components/ChatBot.css';
 import config from "@arcgis/core/config.js";
@@ -179,36 +180,175 @@ function ArcGISMap() {
     if (!view) return null;
 
     try {
-      const results = await locator.addressToLocations("https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer", {
-        address: {
-          SingleLine: cityName
-        },
-        outFields: ["*"]
+      console.log("Searching for city:", cityName);
+      
+      // First, try to use the Esri World Geocoding Service directly
+      // This is more reliable for finding cities by name
+      const geocodeUrl = "https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates";
+      const searchParams = new URLSearchParams({
+        f: "json",
+        singleLine: cityName,
+        outFields: "*",
+        maxLocations: "1",
+        outSR: "4326",
+        searchExtent: "",
+        location: "",
+        distance: "",
+        category: "City"
       });
-
-      if (results.length > 0) {
-        const location = results[0];
+      
+      console.log("Sending geocode request to:", geocodeUrl);
+      const response = await fetch(`${geocodeUrl}?${searchParams.toString()}`);
+      const data = await response.json();
+      console.log("Direct geocode response:", data);
+      
+      if (data.candidates && data.candidates.length > 0) {
+        const bestMatch = data.candidates[0];
+        console.log("Best match found:", bestMatch);
+        
+        // Clear any existing graphics
+        view.graphics.removeAll();
+        
+        // Create a graphics layer for search results if it doesn't exist
+        let searchResultsLayer = view.map.findLayerById("searchResultsLayer");
+        if (!searchResultsLayer) {
+          searchResultsLayer = new GraphicsLayer({
+            id: "searchResultsLayer",
+            title: "Search Results",
+            elevationInfo: {
+              mode: "relative-to-ground",
+              offset: 1
+            }
+          });
+          view.map.add(searchResultsLayer);
+        } else {
+          searchResultsLayer.removeAll();
+        }
+        
+        // Create a point for the city location
+        const cityPoint = new Point({
+          x: bestMatch.location.x,  // longitude
+          y: bestMatch.location.y,  // latitude
+          spatialReference: { wkid: 4326 }
+        });
+        
+        // Add a marker for the city
+        const cityMarker = new Graphic({
+          geometry: cityPoint,
+          symbol: {
+            type: "simple-marker",
+            color: [0, 119, 255],
+            size: "12px",
+            outline: {
+              color: [255, 255, 255],
+              width: 2
+            }
+          },
+          attributes: {
+            name: bestMatch.address,
+            score: bestMatch.score
+          },
+          popupTemplate: {
+            title: "{name}",
+            content: "Match score: {score}%"
+          }
+        });
+        
+        searchResultsLayer.add(cityMarker);
+        
+        // Create a buffer graphic around the city
+        const bufferGraphic = new Graphic({
+          geometry: cityPoint,
+          symbol: {
+            type: "simple-fill",
+            color: [0, 119, 255, 0.1],
+            outline: {
+              color: [0, 119, 255, 0.5],
+              width: 1
+            }
+          }
+        });
+        searchResultsLayer.add(bufferGraphic);
         
         // Create a more dramatic camera movement for 3D
+        console.log("Moving camera to:", cityPoint);
         view.goTo({
-          target: new Point({
-            longitude: location.location.longitude,
-            latitude: location.location.latitude
-          }),
-          zoom: 12,
-          tilt: 65,
+          target: cityPoint,
+          zoom: 10,  // Zoom out slightly to see more context
+          tilt: 45,  // Less extreme tilt to see more of the surrounding area
           heading: 0
         }, {
           duration: 2000,
           easing: "out-expo"
+        }).catch(err => {
+          console.error("Error during camera movement:", err);
         });
+        
+        // Find and highlight fire perimeters layer
+        const firePerimetersLayer = view.map.allLayers.find(layer => 
+          layer.title && (layer.title.includes("Fire Perimeter") || layer.title.includes("WFIGS_Interagency_Perimeters"))
+        );
+        
+        if (firePerimetersLayer) {
+          console.log("Found fire perimeters layer:", firePerimetersLayer.title);
+          // Reset any previous filters
+          if (firePerimetersLayer.definitionExpression) {
+            firePerimetersLayer.definitionExpression = "1=1";
+          }
+          
+          // Use a buffer to find nearby fires
+          const cityBuffer = {
+            spatialRelationship: "intersects",
+            geometry: cityPoint,
+            distance: 100,  // 100 km buffer
+            units: "kilometers"
+          };
+          
+          // Highlight the layer with fires near the city
+          firePerimetersLayer.effect = {
+            filter: cityBuffer,
+            includedEffect: "bloom(2, 1px, 0)",
+            excludedEffect: "opacity(0.3)"
+          };
+        } else {
+          console.log("Fire perimeters layer not found");
+          // List all available layers for debugging
+          view.map.allLayers.forEach(layer => {
+            console.log("Available layer:", layer.title || layer.id);
+          });
+        }
+        
+        // Also highlight active fires layer
+        const activeFiresLayer = view.map.allLayers.find(layer => 
+          layer.title && (layer.title.includes("Active Fire") || layer.title.includes("Active_Fires"))
+        );
+        
+        if (activeFiresLayer) {
+          console.log("Found active fires layer:", activeFiresLayer.title);
+          // Highlight active fires near the city
+          activeFiresLayer.effect = {
+            filter: {
+              spatialRelationship: "intersects",
+              geometry: cityPoint,
+              distance: 100,  // 100 km buffer
+              units: "kilometers"
+            },
+            includedEffect: "bloom(2, 1px, 0)",
+            excludedEffect: "opacity(0.3)"
+          };
+        } else {
+          console.log("Active fires layer not found");
+        }
 
         return {
-          latitude: location.location.latitude,
-          longitude: location.location.longitude
+          latitude: bestMatch.location.y,
+          longitude: bestMatch.location.x,
+          address: bestMatch.address
         };
+      } else {
+        console.log("No results found for:", cityName);
+        return null;
       }
-      return null;
     } catch (error) {
       console.error("Error finding location:", error);
       return null;

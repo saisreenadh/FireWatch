@@ -39,8 +39,8 @@ function LandingPage({ onGetStarted }) {
             quality: "high"
           },
           stars: {
-            density: 1,
-            atmosphereEffect: 0.4
+            density: 0.8,
+            atmosphereEffect: 0.5
           },
           lighting: {
             directShadowsEnabled: true,
@@ -50,9 +50,9 @@ function LandingPage({ onGetStarted }) {
         },
         camera: {
           position: {
-            x: -10000000,
-            y: 5000000,
-            z: 20000000
+            x: -8000000,
+            y: 4000000,
+            z: 15000000
           },
           heading: 0,
           tilt: 0
@@ -83,39 +83,31 @@ function LandingPage({ onGetStarted }) {
       });
       map.add(markerLayer);
 
-      // Sample fire locations around the globe
+      // Sample fire locations around the globe - positioned to match the image
       const fireLocations = [
-        // North America
-        { longitude: -100, latitude: 40, intensity: 1.2 },
-        { longitude: -120, latitude: 35, intensity: 1 },
-        { longitude: -80, latitude: 45, intensity: 1.5 },
-        // South America
-        { longitude: -60, latitude: -15, intensity: 1.3 },
-        { longitude: -70, latitude: -35, intensity: 1.1 },
-        // Europe
-        { longitude: 10, latitude: 50, intensity: 1 },
-        { longitude: 20, latitude: 45, intensity: 1.2 },
-        { longitude: 30, latitude: 55, intensity: 1.1 },
-        // Africa
-        { longitude: 20, latitude: 0, intensity: 1.4 },
-        { longitude: 30, latitude: -20, intensity: 1.2 },
-        { longitude: 15, latitude: -25, intensity: 1.3 },
-        // Asia
-        { longitude: 100, latitude: 35, intensity: 1.1 },
-        { longitude: 120, latitude: 30, intensity: 1.3 },
-        { longitude: 140, latitude: 35, intensity: 1.2 },
-        { longitude: 80, latitude: 20, intensity: 1.4 },
-        // Australia
-        { longitude: 135, latitude: -25, intensity: 1.5 },
-        { longitude: 145, latitude: -30, intensity: 1.2 },
-        { longitude: 115, latitude: -20, intensity: 1.3 },
-        // Additional scattered locations
-        { longitude: -160, latitude: 20, intensity: 1 },
-        { longitude: 60, latitude: 60, intensity: 1.1 },
-        { longitude: -40, latitude: 70, intensity: 1 },
-        { longitude: 170, latitude: -40, intensity: 1.2 },
-        { longitude: -150, latitude: -40, intensity: 1.1 },
-        { longitude: 50, latitude: -10, intensity: 1.3 }
+        // South America (visible in the image)
+        { longitude: -60, latitude: -10, intensity: 0.8 },
+        // Africa (visible in the image)
+        { longitude: 20, latitude: 5, intensity: 0.8 },
+        // North America (visible in the image)
+        { longitude: -100, latitude: 40, intensity: 0.8 },
+        // Australia/Oceania (visible in the image)
+        { longitude: 135, latitude: -25, intensity: 0.8 },
+        // Additional fires to match image
+        { longitude: -120, latitude: 50, intensity: 0.8 },
+        { longitude: 30, latitude: 60, intensity: 0.8 },
+        { longitude: 120, latitude: 45, intensity: 0.8 },
+        { longitude: -50, latitude: -30, intensity: 0.8 },
+        { longitude: 80, latitude: 30, intensity: 0.8 },
+        { longitude: 140, latitude: 40, intensity: 0.8 },
+        // Add a few more subtle ones
+        { longitude: -80, latitude: 35, intensity: 0.6 },
+        { longitude: 10, latitude: 45, intensity: 0.6 },
+        { longitude: 60, latitude: -10, intensity: 0.6 },
+        { longitude: 100, latitude: 10, intensity: 0.6 },
+        { longitude: -140, latitude: 60, intensity: 0.6 },
+        { longitude: -20, latitude: 10, intensity: 0.6 },
+        { longitude: 170, latitude: -30, intensity: 0.6 }
       ];
 
       // Wait for view to be ready before adding graphics
@@ -127,51 +119,30 @@ function LandingPage({ onGetStarted }) {
             latitude: loc.latitude
           });
 
-          // Create glowing orb symbol using SVG
+          // Create glowing orb symbol using SVG - simplified to match the image
           const markerSymbol = {
             type: "picture-marker",
             url: "data:image/svg+xml," + encodeURIComponent(`
-              <svg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+              <svg width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
                 <defs>
                   <radialGradient id="orbGrad${index}" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
-                    <stop offset="0%" style="stop-color:#FFA500;stop-opacity:1"/>
-                    <stop offset="100%" style="stop-color:#FFA500;stop-opacity:0"/>
+                    <stop offset="0%" style="stop-color:#FF6B00;stop-opacity:1"/>
+                    <stop offset="100%" style="stop-color:#FF6B00;stop-opacity:0"/>
                   </radialGradient>
                 </defs>
-                <!-- Main dot -->
-                <circle cx="20" cy="20" r="4" fill="#FF6B00">
+                <!-- Simple glowing dot to match the image -->
+                <circle cx="10" cy="10" r="3" fill="#FF6B00">
                   <animate attributeName="opacity"
-                          values="1;0.4;1"
-                          dur="2s"
+                          values="1;0.6;1"
+                          dur="1.5s"
                           repeatCount="indefinite"
                           calcMode="spline"
                           keySplines="0.4 0 0.2 1; 0.4 0 0.2 1"/>
                 </circle>
-                <!-- Outer ring -->
-                <circle cx="20" cy="20" r="6" fill="none" stroke="#FF4500" stroke-width="1">
-                  <animate attributeName="r"
-                          values="6;10;6"
-                          dur="3s"
-                          repeatCount="indefinite"
-                          calcMode="spline"
-                          keySplines="0.4 0 0.2 1; 0.4 0 0.2 1"/>
+                <!-- Subtle glow effect -->
+                <circle cx="10" cy="10" r="5" fill="none" stroke="#FF4500" stroke-width="0.5">
                   <animate attributeName="opacity"
-                          values="0.8;0;0.8"
-                          dur="3s"
-                          repeatCount="indefinite"
-                          calcMode="spline"
-                          keySplines="0.4 0 0.2 1; 0.4 0 0.2 1"/>
-                </circle>
-                <!-- Pulse ring -->
-                <circle cx="20" cy="20" r="4" fill="none" stroke="#FF8C00" stroke-width="1">
-                  <animate attributeName="r"
-                          values="4;8;4"
-                          dur="2s"
-                          repeatCount="indefinite"
-                          calcMode="spline"
-                          keySplines="0.4 0 0.2 1; 0.4 0 0.2 1"/>
-                  <animate attributeName="opacity"
-                          values="1;0;1"
+                          values="0.7;0.2;0.7"
                           dur="2s"
                           repeatCount="indefinite"
                           calcMode="spline"
@@ -179,8 +150,8 @@ function LandingPage({ onGetStarted }) {
                 </circle>
               </svg>
             `),
-            width: 25 * loc.intensity,  // Reduced size
-            height: 25 * loc.intensity   // Reduced size
+            width: 15 * loc.intensity,  // Smaller size to match image
+            height: 15 * loc.intensity   // Smaller size to match image
           };
 
           const markerGraphic = new Graphic({
@@ -195,12 +166,15 @@ function LandingPage({ onGetStarted }) {
         const rotate = () => {
           const camera = view.camera.clone();
           
-          // Calculate new camera position
-          const angle = (Date.now() * 0.002) % 360; // Much slower rotation
+          // Calculate new camera position - very slow rotation to match the image
+          const angle = (Date.now() * 0.0005) % 360; // Even slower rotation to match image
           const radius = Math.sqrt(camera.position.x * camera.position.x + camera.position.y * camera.position.y);
           
           camera.position.x = radius * Math.cos(angle * Math.PI / 180);
           camera.position.y = radius * Math.sin(angle * Math.PI / 180);
+          
+          // Slightly adjust tilt for better view
+          camera.tilt = 0.5;
           
           view.goTo(camera, {
             animate: false,
@@ -235,7 +209,7 @@ function LandingPage({ onGetStarted }) {
       <div className="landing-content">
         <div className="landing-text">
           <h1>FireWatch</h1>
-          <p>Real-time wildfire monitoring and tracking system</p>
+          <p>Real-time wildfire monitoring and tracking across the globe. Stay informed with instant alerts and detailed information about fire incidents.</p>
           <button className="cta-primary" onClick={onGetStarted}>
             Get Started
           </button>

@@ -38,30 +38,91 @@ export async function getWeatherData(lat, lon) {
 
 export async function getFireData(lat, lon) {
     try {
-        // For now, return mock data since we don't have a real fire API endpoint
+        // Fetch active fires data from ArcGIS service
+        const activeFiresResponse = await fetch(
+            `https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/Active_Fires/FeatureServer/0/query?where=1%3D1&outFields=*&geometry=${lon},${lat}&geometryType=esriGeometryPoint&distance=50&units=esriSRUnit_Kilometer&returnGeometry=true&f=json`
+        );
+        const activeFiresData = await activeFiresResponse.json();
+
+        // Fetch fire perimeters data from ArcGIS service
+        const perimetersResponse = await fetch(
+            `https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Interagency_Perimeters/FeatureServer/0/query?where=1%3D1&outFields=*&geometry=${lon},${lat}&geometryType=esriGeometryPoint&distance=50&units=esriSRUnit_Kilometer&returnGeometry=true&f=json`
+        );
+        const perimetersData = await perimetersResponse.json();
+
+        // Process the data
+        const activeFiresCount = activeFiresData.features ? activeFiresData.features.length : 0;
+        const perimetersCount = perimetersData.features ? perimetersData.features.length : 0;
+        
+        // Calculate total burned acres
+        let totalBurnedAcres = 0;
+        if (perimetersData.features) {
+            totalBurnedAcres = perimetersData.features.reduce((total, feature) => {
+                return total + (feature.attributes.GISAcres || 0);
+            }, 0);
+        }
+
+        // Find nearest fire if any
+        let nearestFire = null;
+        if (activeFiresCount > 0) {
+            const fires = activeFiresData.features.map(feature => {
+                const fireLat = feature.geometry.y;
+                const fireLon = feature.geometry.x;
+                const distance = calculateDistance(lat, lon, fireLat, fireLon);
+                return {
+                    name: feature.attributes.IncidentName || 'Unnamed Fire',
+                    distance: distance.toFixed(1),
+                    containment: feature.attributes.PercentContained ? `${feature.attributes.PercentContained}%` : 'Unknown',
+                    size: feature.attributes.DailyAcres || 0
+                };
+            });
+            
+            // Sort by distance
+            fires.sort((a, b) => parseFloat(a.distance) - parseFloat(b.distance));
+            nearestFire = fires[0];
+        }
+
+        // Determine risk level based on fire proximity and count
+        let riskLevel = "low";
+        if (activeFiresCount > 0 && nearestFire && parseFloat(nearestFire.distance) < 10) {
+            riskLevel = "high";
+        } else if (activeFiresCount > 0 || perimetersCount > 0) {
+            riskLevel = "moderate";
+        }
+
         return {
-            risk_level: "moderate",
+            active_fires_count: activeFiresCount,
+            perimeters_count: perimetersCount,
+            total_burned_acres: totalBurnedAcres,
+            nearest_fire: nearestFire,
+            risk_level: riskLevel,
             conditions: {
-                drought_index: 0.6,
-                vegetation_dryness: "medium",
-                recent_fires: 0
-            },
-            nearest_fire: {
-                distance: 45.2,  // kilometers
-                name: "Sample Fire",
-                containment: "65%",
-                size: 1200  // acres
+                drought_index: 0.6, // This would ideally come from a drought API
+                vegetation_dryness: "medium", // This would ideally be calculated from weather data
+                recent_fires: activeFiresCount
             }
         };
     } catch (error) {
         console.error('Error fetching fire data:', error);
-        return { risk: 'Unable to fetch fire risk data' };
+        return { 
+            risk_level: 'unknown',
+            active_fires_count: 0,
+            perimeters_count: 0,
+            total_burned_acres: 0
+        };
     }
 }
 
 export async function getGeminiAnalysis(weatherData, fireData, cityName) {
     try {
-        const model = new GoogleGenerativeAI(getEnvVar('VITE_GEMINI_API_KEY')).getGenerativeModel({ model: 'gemini-pro' });
+        // Check if we have a valid API key
+        const apiKey = getEnvVar('VITE_GEMINI_API_KEY');
+        if (!apiKey) {
+            console.warn('No Gemini API key found. Using mock analysis data.');
+            return generateMockAnalysis(weatherData, fireData, cityName);
+        }
+        
+        const model = new GoogleGenerativeAI(apiKey).getGenerativeModel({ model: 'gemini-pro' });
 
         // Get current conditions
         const currentHourIndex = new Date().getHours();
@@ -87,6 +148,50 @@ export async function getGeminiAnalysis(weatherData, fireData, cityName) {
             precipitationProb: weatherData.hourly.precipitation_probability[currentHourIndex],
             soilMoisture: weatherData.hourly.soil_moisture_1_to_3cm[currentHourIndex]
         };
+
+        // Determine risk percentage based on fire data and weather conditions
+        let riskPercentage = 0;
+        
+        // Fire activity factors (50%)
+        if (fireData.active_fires_count > 0) {
+            riskPercentage += 25; // Active fires present
+            
+            // Nearby fire factor
+            if (fireData.nearest_fire && parseFloat(fireData.nearest_fire.distance) < 10) {
+                riskPercentage += 25; // Very close fire
+            } else if (fireData.nearest_fire && parseFloat(fireData.nearest_fire.distance) < 30) {
+                riskPercentage += 15; // Moderately close fire
+            } else {
+                riskPercentage += 5; // Distant fire
+            }
+        }
+        
+        // Weather factors (50%)
+        // High temperature risk
+        if (currentConditions.temperature > 30) riskPercentage += 10;
+        else if (currentConditions.temperature > 25) riskPercentage += 5;
+        
+        // Low humidity risk
+        if (currentConditions.humidity < 20) riskPercentage += 15;
+        else if (currentConditions.humidity < 30) riskPercentage += 10;
+        else if (currentConditions.humidity < 40) riskPercentage += 5;
+        
+        // High wind risk
+        if (currentConditions.windSpeed > 30) riskPercentage += 15;
+        else if (currentConditions.windSpeed > 20) riskPercentage += 10;
+        else if (currentConditions.windSpeed > 10) riskPercentage += 5;
+        
+        // Low precipitation risk
+        if (historicalData.dryDays > 20) riskPercentage += 10;
+        else if (historicalData.dryDays > 10) riskPercentage += 5;
+
+        // Cap at 100%
+        riskPercentage = Math.min(riskPercentage, 100);
+        
+        // Determine risk level based on percentage
+        let riskLevel = "Low";
+        if (riskPercentage >= 70) riskLevel = "High";
+        else if (riskPercentage >= 40) riskLevel = "Medium";
 
         const prompt = `As a fire safety expert, analyze this comprehensive weather and fire data for ${cityName} and provide a practical fire risk assessment:
 
@@ -119,6 +224,10 @@ Closest Fire:
 - Size: ${fireData.nearest_fire.size} acres
 - Containment: ${fireData.nearest_fire.containment}` : ''}
 
+Risk Assessment:
+Risk Level: ${riskLevel}
+Risk Percentage: ${riskPercentage}%
+
 Provide a practical fire risk assessment considering:
 1. Actual fire presence and behavior in the area
 2. Current weather that could affect fire spread (wind, humidity, temperature)
@@ -129,7 +238,8 @@ Format the response exactly like this:
 {
   "cityName": "${cityName}",
   "fireRiskAssessment": {
-    "riskLevel": "[REQUIRED: Low/Medium/High - Consider regional characteristics. Los Angeles and Southern California are HIGH due to climate, vegetation, and fire history]",
+    "riskLevel": "${riskLevel}",
+    "riskPercentage": "${riskPercentage}%",
     "keyRiskFactors": [
       "[REQUIRED: Most critical current condition]",
       "[REQUIRED: Most significant fire activity]",
@@ -146,21 +256,93 @@ Format the response exactly like this:
       "[OPTIONAL: Additional precaution]"
     ]
   }
-}
+}`;
 
-Consider real-world examples:
-High Risk: Los Angeles and Southern California due to Santa Ana winds, dry climate, and fire history. Areas with active fires or severe fire weather.
-Medium Risk: Areas experiencing drought or moderate fire weather conditions
-Low Risk: Areas with consistent rainfall and minimal fire history`;
-
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        return JSON.parse(response.text());
+        try {
+            const result = await model.generateContent(prompt);
+            const response = await result.response;
+            return JSON.parse(response.text());
+        } catch (aiError) {
+            console.error('Error with Gemini API:', aiError);
+            // Fall back to mock data if API fails
+            return generateMockAnalysis(weatherData, fireData, cityName, riskLevel, riskPercentage);
+        }
     } catch (error) {
-        console.error('Error getting Gemini analysis:', error);
-        return 'Unable to analyze fire conditions at this time.';
+        console.error('Error getting analysis:', error);
+        return generateMockAnalysis(weatherData, fireData, cityName);
     }
 }
+
+// Generate mock analysis data when API is unavailable
+function generateMockAnalysis(weatherData, fireData, cityName, riskLevel = null, riskPercentage = null) {
+    // Determine risk level based on fire data if not provided
+    if (!riskLevel) {
+        if (fireData.active_fires_count > 0 && fireData.nearest_fire && parseFloat(fireData.nearest_fire.distance) < 20) {
+            riskLevel = "High";
+            riskPercentage = "75%";
+        } else if (fireData.active_fires_count > 0 || fireData.perimeters_count > 0) {
+            riskLevel = "Medium";
+            riskPercentage = "45%";
+        } else {
+            riskLevel = "Low";
+            riskPercentage = "15%";
+        }
+    } else if (!riskPercentage) {
+        riskPercentage = riskLevel === "High" ? "75%" : riskLevel === "Medium" ? "45%" : "15%";
+    }
+    
+    // Generate appropriate risk factors based on level
+    const keyRiskFactors = [];
+    const currentConcerns = [];
+    const safetyRecommendations = [];
+    
+    // Common factors for all risk levels
+    keyRiskFactors.push("Current weather conditions");
+    
+    if (fireData.active_fires_count > 0) {
+        keyRiskFactors.push(`${fireData.active_fires_count} active fires within 50km`);
+        if (fireData.nearest_fire) {
+            currentConcerns.push(`Fire "${fireData.nearest_fire.name}" is ${fireData.nearest_fire.distance}km away`);
+        }
+    } else {
+        keyRiskFactors.push("No active fires in immediate area");
+    }
+    
+    // Add risk-level specific information
+    if (riskLevel === "High") {
+        currentConcerns.push("Potential for rapid fire spread due to current conditions");
+        currentConcerns.push("Evacuation routes may become compromised if fire activity increases");
+        
+        safetyRecommendations.push("Stay alert and monitor official emergency channels");
+        safetyRecommendations.push("Prepare an evacuation plan and emergency kit");
+        safetyRecommendations.push("Clear flammable materials from around your home");
+    } else if (riskLevel === "Medium") {
+        currentConcerns.push("Changing weather conditions could increase fire risk");
+        currentConcerns.push("Limited firefighting resources due to multiple incidents");
+        
+        safetyRecommendations.push("Review your emergency preparedness plan");
+        safetyRecommendations.push("Stay informed about local fire conditions");
+    } else {
+        currentConcerns.push("Minimal immediate fire concerns");
+        currentConcerns.push("Seasonal changes may affect future fire risk");
+        
+        safetyRecommendations.push("Maintain awareness of fire safety practices");
+        safetyRecommendations.push("Use this time to prepare for future fire seasons");
+    }
+    
+    return {
+        cityName: cityName,
+        fireRiskAssessment: {
+            riskLevel: riskLevel,
+            riskPercentage: riskPercentage,
+            keyRiskFactors: keyRiskFactors,
+            currentConcerns: currentConcerns,
+            safetyRecommendations: safetyRecommendations
+        }
+    };
+}
+
+
 
 // Helper functions for historical analysis
 function calculateAverage(array) {
